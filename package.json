@@ -1,0 +1,20 @@
+{
+  "name": "soulbound-healthcare",
+  "version": "1.0.0",
+  "description": "Soulbound Healthcare is a blockchain-based Healthcare Records Management System designed to revolutionize the management and verification of healthcare records. Traditional methods often fall short in terms of security, privacy, and efficiency. Soulbound Healthcare addresses these challenges by implementing a SBT system.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.1"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.2",
+    "dotenv": "^16.4.5"
+  }
+}
