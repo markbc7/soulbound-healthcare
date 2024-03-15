@@ -7,3 +7,6 @@ artifacts/
 
 # Environment files
 .env
+
+# Contract ABI
+HealthRecordsSBT_abi.json
