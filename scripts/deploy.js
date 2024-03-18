@@ -8,9 +8,10 @@ async function main() {
     // Deploy the contract
     const healthRecordsSBT = await HealthRecordsSBT.deploy();
 
-    // Wait for the deployment to finish
-    await healthRecordsSBT.deployed();
+    // Wait for 30 seconds before getting the contract address
+    await new Promise(resolve => setTimeout(resolve, 30000));
 
+    // The contract is already deployed when the above await resolves
     console.log("HealthRecordsSBT deployed to:", healthRecordsSBT.address);
 }
 
@@ -21,3 +22,4 @@ main()
         console.error(error);
         process.exit(1);
     });
+

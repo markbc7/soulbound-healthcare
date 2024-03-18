@@ -4,6 +4,7 @@ node_modules/
 # Hardhat cached and artifacts directories
 cache/
 artifacts/
+local_files/
 
 # Environment files
 .env
