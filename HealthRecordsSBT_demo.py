@@ -156,7 +156,7 @@ def add_health_record(account, private_key):
         print(f"Failed to add health record: {e}")
 
 def update_health_record(account, private_key):
-    record_id = int(input("Enter the record ID: "))
+    token_id = int(input("Enter the token ID: "))
     new_record_type = input("Enter the new record type: ")
     new_file_path = input("Enter the new file path: ")
 
@@ -179,7 +179,7 @@ def update_health_record(account, private_key):
         os.remove(temp_file_path)  # Clean up the temp file
 
         # Build and send transaction
-        tx = contract.functions.updateHealthRecord(record_id, new_record_type, new_ipfs_hash).build_transaction({
+        tx = contract.functions.updateHealthRecord(token_id, new_record_type, new_ipfs_hash).build_transaction({
             'from': account,
             'gas': 500000,
             'gasPrice': w3.to_wei('10', 'gwei'),
@@ -196,11 +196,11 @@ def update_health_record(account, private_key):
 
 def grant_record_access(account, private_key):
     recipient_account = input("Enter the recipient account address: ")
-    record_id = int(input("Enter the record ID: "))
+    token_id = int(input("Enter the token ID: "))
     is_healthcare_provider = input("Is the recipient a healthcare provider? (yes/no): ").lower() == 'yes'
 
     try:
-        tx = contract.functions.grantRecordAccess(recipient_account, record_id, is_healthcare_provider).build_transaction({
+        tx = contract.functions.grantRecordAccess(recipient_account, token_id, is_healthcare_provider).build_transaction({
             'from': account,
             'gas': 500000,
             'gasPrice': w3.to_wei('10', 'gwei'),
@@ -217,10 +217,10 @@ def grant_record_access(account, private_key):
 
 def revoke_record_access(account, private_key):
     recipient_account = input("Enter the recipient account address: ")
-    record_id = int(input("Enter the record ID: "))
+    token_id = int(input("Enter the token ID: "))
 
     try:
-        tx = contract.functions.revokeRecordAccess(recipient_account, record_id).build_transaction({
+        tx = contract.functions.revokeRecordAccess(recipient_account, token_id).build_transaction({
             'from': account,
             'gas': 500000,
             'gasPrice': w3.to_wei('10', 'gwei'),
@@ -235,24 +235,32 @@ def revoke_record_access(account, private_key):
     except Exception as e:
         print(f"Failed to revoke record access: {e}")
 
-def get_patient_records(account):
-    patient_account = input("Enter the patient account address: ")
+def get_health_record(account):
+    token_id = int(input("Enter the token ID: "))
 
     try:
-        patient_records = contract.functions.getPatientRecords(patient_account).call({'from': account})
+        health_record = contract.functions.getHealthRecord(token_id).call({'from': account})
 
-        if not patient_records:
-            print("No records found.")
+        if not health_record:
+            print("No record found.")
         else:
-            print("Patient Records:")
-            for record in patient_records:
-                print(f"Record ID: {record[0]}")
-                print(f"Record Type: {record[1]}")
-                print(f"Timestamp: {datetime.utcfromtimestamp(record[2]).strftime('%Y-%m-%d %H:%M:%S')}")
-                print(f"IPFS Hash: {record[3]}")
-                print("---")
+            print("Health Record:")
+            print(f"Record ID: {health_record[0]}")
+            print(f"Record Type: {health_record[1]}")
+            print(f"Timestamp: {datetime.utcfromtimestamp(health_record[2]).strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"IPFS Hash: {health_record[3]}")
+            print(f"Creator: {health_record[4]}")
     except Exception as e:
-        print(f"Failed to get patient records: {e}")
+        print(f"Failed to get health record: {e}")
+
+def has_access_to_record(account):
+    token_id = int(input("Enter the token ID: "))
+
+    try:
+        has_access = contract.functions.hasAccessToRecord(token_id).call({'from': account})
+        print(f"Has access to record {token_id}: {has_access}")
+    except Exception as e:
+        print(f"Failed to check access to record: {e}")
 
 def display_record_content():
     account = input("Enter your Ethereum account address for decryption: ")
@@ -269,6 +277,13 @@ def display_record_content():
     except Exception as e:
         print(f"Error retrieving or decrypting record content: {e}")
 
+def get_token_owner(token_id):
+    try:
+        owner = contract.functions.ownerOf(token_id).call()
+        print(f"Owner of token ID {token_id}: {owner}")
+    except Exception as e:
+        print(f"Failed to get token owner: {e}")        
+
 def main():
     print("\nHealth Records SBT Demo")
     account = input("Enter your Ethereum account address: ")
@@ -280,13 +295,15 @@ def main():
         print("2. Update Health Record")
         print("3. Grant Record Access")
         print("4. Revoke Record Access")
-        print("5. Get Patient Records")
-        print("6. Display Record Content")
-        print("7. Grant Role to Account")
-        print("8. Change User")
-        print("9. Exit")
+        print("5. Get Health Record")
+        print("6. Check Access to Record")
+        print("7. Display Record Content")
+        print("8. Grant Role to Account")
+        print("9. Change User")
+        print("10. Check Token Owner")
+        print("11. Exit")
 
-        choice = input("Enter your choice (1-9): ")
+        choice = input("Enter your choice (1-11): ")
 
         if choice == "1":
             add_health_record(account, private_key)
@@ -297,16 +314,21 @@ def main():
         elif choice == "4":
             revoke_record_access(account, private_key)
         elif choice == "5":
-            get_patient_records(account)
+            get_health_record(account)
         elif choice == "6":
-            display_record_content()
+            has_access_to_record(account)
         elif choice == "7":
-            grant_role_to_account(account, private_key)
+            display_record_content()
         elif choice == "8":
+            grant_role_to_account(account, private_key)
+        elif choice == "9":
             account = input("Enter new Ethereum account address: ")
             private_key = getpass.getpass(prompt='Enter new private key: ')
             print("User changed successfully.")
-        elif choice == "9":
+        elif choice == "10":
+            token_id = int(input("Enter the token ID: "))
+            get_token_owner(token_id)
+        elif choice == "11":
             print("Exiting the demo.")
             break
         else:

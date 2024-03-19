@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
-contract HealthRecordsSBT is AccessControl {
+contract HealthRecordsSBT is ERC721, AccessControl {
     bytes32 public constant PATIENT_ROLE = keccak256("PATIENT_ROLE");
     bytes32 public constant PROVIDER_ROLE = keccak256("PROVIDER_ROLE");
     bytes32 public constant INSURER_ROLE = keccak256("INSURER_ROLE");
@@ -16,19 +17,17 @@ contract HealthRecordsSBT is AccessControl {
         address creator;
     }
 
-    mapping(address => HealthRecord[]) private patientRecords;
-    mapping(uint256 => address) private recordOwner;
-    mapping(uint256 => mapping(address => bool)) private recordAccess;
+    mapping(uint256 => HealthRecord) private _healthRecords;
+    mapping(uint256 => mapping(address => bool)) private _recordAccess;
 
-    uint256 private _recordIdCounter;
+    uint256 private _tokenIdCounter;
 
-    event HealthRecordAdded(uint256 indexed recordId, address indexed patient, string recordType, string ipfsHash);
-    event HealthRecordUpdated(uint256 indexed recordId, address indexed patient, string newRecordType, string newIpfsHash);
-    event HealthRecordAccessGranted(uint256 indexed recordId, address indexed patient, address recipient, string role);
-    event HealthRecordAccessRevoked(uint256 indexed recordId, address indexed patient, address recipient, string role);
-    event EmergencyAccessUsed(uint256 indexed recordId, address indexed provider);
+    event HealthRecordAdded(uint256 indexed tokenId, address indexed patient, string recordType, string ipfsHash);
+    event HealthRecordUpdated(uint256 indexed tokenId, address indexed patient, string newRecordType, string newIpfsHash);
+    event HealthRecordAccessGranted(uint256 indexed tokenId, address indexed patient, address recipient, string role);
+    event HealthRecordAccessRevoked(uint256 indexed tokenId, address indexed patient, address recipient, string role);
 
-    constructor() {
+    constructor() ERC721("HealthRecordsSBT", "HRSBT") {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
@@ -42,82 +41,68 @@ contract HealthRecordsSBT is AccessControl {
         _;
     }
 
-    modifier onlyPatient() {
-        require(hasRole(PATIENT_ROLE, msg.sender), "Unauthorized: caller must be a patient");
+    modifier onlyPatient(uint256 tokenId) {
+        require(ownerOf(tokenId) == msg.sender, "Unauthorized: caller must be the patient");
         _;
     }
 
-    modifier onlyPatientOrAdmin() {
-        require(hasRole(PATIENT_ROLE, msg.sender) || hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "Unauthorized: caller must be a patient or admin");
-        _;
-    }
-
-    modifier recordExists(uint256 recordId) {
-        require(recordOwner[recordId] != address(0), "Invalid record ID");
-        _;
-    }
-
-    modifier hasAccess(uint256 recordId) {
-        require(recordAccess[recordId][msg.sender] || msg.sender == recordOwner[recordId], "Unauthorized: no access to this record");
+    modifier onlyPatientOrAdmin(uint256 tokenId) {
+        require(ownerOf(tokenId) == msg.sender || hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "Unauthorized: caller must be the patient or admin");
         _;
     }
 
     function addHealthRecord(string memory recordType, string memory ipfsHash) public onlyPatientOrProvider {
-        _recordIdCounter++;
-        uint256 recordId = _recordIdCounter;
-        HealthRecord memory record = HealthRecord(recordId, recordType, block.timestamp, ipfsHash, msg.sender);
-        patientRecords[msg.sender].push(record);
-        recordOwner[recordId] = msg.sender;
-        recordAccess[recordId][msg.sender] = true;
-        emit HealthRecordAdded(recordId, msg.sender, recordType, ipfsHash);
+        uint256 tokenId = _tokenIdCounter;
+        _tokenIdCounter++;
+        _safeMint(msg.sender, tokenId);
+        _healthRecords[tokenId] = HealthRecord(tokenId, recordType, block.timestamp, ipfsHash, msg.sender);
+        _recordAccess[tokenId][msg.sender] = true;
+        emit HealthRecordAdded(tokenId, msg.sender, recordType, ipfsHash);
     }
 
-    function updateHealthRecord(uint256 recordId, string memory newRecordType, string memory newIpfsHash) public onlyProvider recordExists(recordId){
+    function updateHealthRecord(uint256 tokenId, string memory newRecordType, string memory newIpfsHash) public onlyProvider {
+        ownerOf(tokenId);
         require(
-            patientRecords[recordOwner[recordId]][_findIndex(recordOwner[recordId], recordId)].creator == msg.sender || recordAccess[recordId][msg.sender],
+            _healthRecords[tokenId].creator == msg.sender || _recordAccess[tokenId][msg.sender],
             "Unauthorized: caller is not the creator of this record or does not have access"
         );
-        HealthRecord storage record = patientRecords[recordOwner[recordId]][_findIndex(recordOwner[recordId], recordId)];
+        HealthRecord storage record = _healthRecords[tokenId];
         record.recordType = newRecordType;
         record.ipfsHash = newIpfsHash;
         record.timestamp = block.timestamp;
-        emit HealthRecordUpdated(recordId, recordOwner[recordId], newRecordType, newIpfsHash);
+        emit HealthRecordUpdated(tokenId, ownerOf(tokenId), newRecordType, newIpfsHash);
     }
 
-    function grantRecordAccess(address recipient, uint256 recordId, bool isHealthcareProvider) public onlyPatient recordExists(recordId) {
-        require(recordOwner[recordId] == msg.sender, "Unauthorized: caller is not the owner of this record");
-        recordAccess[recordId][recipient] = true;
-        emit HealthRecordAccessGranted(recordId, msg.sender, recipient, isHealthcareProvider ? "Healthcare Provider" : "Insurance Provider");
+    function grantRecordAccess(address recipient, uint256 tokenId, bool isHealthcareProvider) public onlyPatient(tokenId) {
+        _recordAccess[tokenId][recipient] = true;
+        emit HealthRecordAccessGranted(tokenId, msg.sender, recipient, isHealthcareProvider ? "Healthcare Provider" : "Insurance Provider");
     }
 
-    function revokeRecordAccess(address recipient, uint256 recordId) public onlyPatientOrAdmin recordExists(recordId) {
-        require(recordAccess[recordId][recipient], "No access to revoke");
-        recordAccess[recordId][recipient] = false;
-        emit HealthRecordAccessRevoked(recordId, msg.sender, recipient, hasRole(PROVIDER_ROLE, recipient) ? "Healthcare Provider" : "Insurance Provider");
+    function revokeRecordAccess(address recipient, uint256 tokenId) public onlyPatientOrAdmin(tokenId) {
+        require(_recordAccess[tokenId][recipient], "No access to revoke");
+        _recordAccess[tokenId][recipient] = false;
+        emit HealthRecordAccessRevoked(tokenId, msg.sender, recipient, hasRole(PROVIDER_ROLE, recipient) ? "Healthcare Provider" : "Insurance Provider");
     }
 
-    function useEmergencyAccess(uint256 recordId) public onlyProvider recordExists(recordId) {
-        require(!recordAccess[recordId][msg.sender], "Access already granted");
-        recordAccess[recordId][msg.sender] = true; // Grant temporary access
-        emit EmergencyAccessUsed(recordId, msg.sender);
-        // Note: Implement logic to automatically revoke this access after a certain period or under certain conditions
+    function getHealthRecord(uint256 tokenId) public view returns (HealthRecord memory) {
+        ownerOf(tokenId);
+        require(
+            ownerOf(tokenId) == msg.sender || hasRole(PROVIDER_ROLE, msg.sender) || hasRole(INSURER_ROLE, msg.sender),
+            "Unauthorized: caller must be the patient, a provider, or an insurer"
+        );
+        return _healthRecords[tokenId];
     }
 
-    function getPatientRecords(address patient) public view returns (HealthRecord[] memory) {
-        require(msg.sender == patient || hasRole(PROVIDER_ROLE, msg.sender) || hasRole(INSURER_ROLE, msg.sender), "Unauthorized: caller must be the patient, a provider, or an insurer");
-        return patientRecords[patient];
+    function hasAccessToRecord(uint256 tokenId) public view returns (bool) {
+        ownerOf(tokenId);
+        return _recordAccess[tokenId][msg.sender] || ownerOf(tokenId) == msg.sender;
     }
 
-    function hasAccessToRecord(uint256 recordId) public view recordExists(recordId) returns (bool) {
-        return recordAccess[recordId][msg.sender] || msg.sender == recordOwner[recordId];
+    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721, AccessControl) returns (bool) {
+        return super.supportsInterface(interfaceId);
     }
 
-    function _findIndex(address patient, uint256 recordId) private view returns (uint256) {
-        for (uint256 i = 0; i < patientRecords[patient].length; i++) {
-            if (patientRecords[patient][i].recordId == recordId) {
-                return i;
-            }
-        }
-        revert("Record not found");
+    function _beforeTokenTransfer(address from) internal virtual {
+        require(from == address(0), "SBT: token transfer not allowed");
     }
 }
